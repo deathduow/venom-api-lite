@@ -1,0 +1,7 @@
+sessions
+node_modules
+Dockerfile
+docker-compose.yml
+.git
+.gitignore
+.env

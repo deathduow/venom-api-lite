@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  venom-lite-api:
+    build: .
+    container_name: venom-lite-api
+    ports:
+      - "3371:3371"
+    restart: always
+    volumes:
+      - ./sessions:/app/sessions # Simpan session supaya tidak login ulang
+    environment:
+      - TZ=Asia/Jakarta
