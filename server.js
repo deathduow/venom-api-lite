@@ -1,20 +1,29 @@
+require('dotenv').config(); // <<< Load .env
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const { executablePath } = require('puppeteer');
 const puppeteerExtra = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const express = require('express');
+const qrcode = require('qrcode-terminal');
+const rateLimit = require('express-rate-limit');
+
+const app = express();
+const port = process.env.PORT || 3371;
+const API_KEY = process.env.API_KEY;
 
 puppeteerExtra.use(StealthPlugin());
 
-const express = require('express');
-const qrcode = require('qrcode-terminal');
-
-const app = express();
-const port = 3371;
-
 app.use(express.json());
 
-const API_KEY = '5f4dcc3b5aa765d61d8327deb882cf99'; // Ganti dengan kunci rahasia kamu
+// 🛡️ API Rate Limiter
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 menit
+  max: 30, // Maksimal 30 request per menit
+  message: { status: false, message: '⚠️ Too many requests, slow down.' },
+});
+app.use(limiter);
 
+// 🛡️ API Key Middleware
 app.use((req, res, next) => {
     const apiKey = req.headers['x-api-key'];
     if (!apiKey || apiKey !== API_KEY) {
@@ -23,7 +32,7 @@ app.use((req, res, next) => {
     next();
 });
 
-let latestQr = ''; // Simpan QR terbaru
+let latestQr = '';
 let clientStatus = {
     ready: false,
     disconnected: false,
@@ -48,8 +57,12 @@ const client = new Client({
     }
 });
 
+// 🛠️ Auto Reconnect Logic
+function reinitializeClient() {
+    console.log('🔄 Reinitializing client...');
+    client.initialize();
+}
 
-// ===== Event WhatsApp Client =====
 client.on('qr', (qr) => {
     latestQr = qr;
     qrcode.generate(qr, { small: true });
@@ -59,29 +72,29 @@ client.on('qr', (qr) => {
 client.on('ready', () => {
     console.log('✅ Client is ready!');
     clientStatus.ready = true;
+    clientStatus.disconnected = false;
 });
 
 client.on('disconnected', (reason) => {
     console.warn('⚠️ Client disconnected:', reason);
     clientStatus.ready = false;
     clientStatus.disconnected = true;
+    setTimeout(reinitializeClient, 5000); // Coba reconnect 5 detik kemudian
 });
 
 client.on('auth_failure', (message) => {
     console.error('❌ Authentication failure:', message);
     clientStatus.lastError = message;
+    setTimeout(reinitializeClient, 5000); // Reconnect setelah auth failure
 });
 
 client.initialize();
 
 // ===== Endpoint Routes =====
-
-// Home
 app.get('/', (req, res) => {
     res.send('✅ Venom Lite API is running...');
 });
 
-// QR Page
 app.get('/qr', (req, res) => {
     if (!latestQr) {
         return res.send('⚠️ QR Code belum tersedia. Tunggu sebentar...');
@@ -99,7 +112,6 @@ app.get('/qr', (req, res) => {
     `);
 });
 
-// Info Device
 app.get('/info', async (req, res) => {
     try {
         const info = await client.info;
@@ -109,7 +121,6 @@ app.get('/info', async (req, res) => {
     }
 });
 
-// Status Health Check
 app.get('/status', (req, res) => {
     if (clientStatus.ready) {
         res.json({ status: true, message: '✅ WhatsApp Client is connected and ready.' });
@@ -118,7 +129,6 @@ app.get('/status', (req, res) => {
     }
 });
 
-// Debug Full
 app.get('/debug', async (req, res) => {
     try {
         const info = await client.info;
@@ -135,7 +145,6 @@ app.get('/debug', async (req, res) => {
     }
 });
 
-// Send Message
 app.post('/send', async (req, res) => {
     const { number, message } = req.body;
 
@@ -145,8 +154,8 @@ app.post('/send', async (req, res) => {
 
     try {
         const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
-
         const isRegistered = await client.isRegisteredUser(chatId);
+
         if (!isRegistered) {
             console.warn(`⚠️ Nomor tidak terdaftar WhatsApp: ${number}`);
             return res.status(422).json({ status: false, message: '❌ Number is not registered on WhatsApp.' });
@@ -166,7 +175,6 @@ app.post('/send', async (req, res) => {
     }
 });
 
-// Jalankan server
 app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Venom Lite API running at http://0.0.0.0:${port}`);
 });
