@@ -7,7 +7,3 @@ services:
     ports:
       - "3371:3371"
     restart: always
-    volumes:
-      - ./sessions:/app/sessions # Simpan session supaya tidak login ulang
-    environment:
-      - TZ=Asia/Jakarta

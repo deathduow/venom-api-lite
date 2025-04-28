@@ -1,4 +1,10 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const { executablePath } = require('puppeteer');
+const puppeteerExtra = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+
+puppeteerExtra.use(StealthPlugin());
+
 const express = require('express');
 const qrcode = require('qrcode-terminal');
 
@@ -6,6 +12,16 @@ const app = express();
 const port = 3371;
 
 app.use(express.json());
+
+const API_KEY = '5f4dcc3b5aa765d61d8327deb882cf99'; // Ganti dengan kunci rahasia kamu
+
+app.use((req, res, next) => {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey || apiKey !== API_KEY) {
+        return res.status(403).json({ status: false, message: 'Forbidden: Invalid API Key' });
+    }
+    next();
+});
 
 let latestQr = ''; // Simpan QR terbaru
 let clientStatus = {
@@ -16,8 +32,10 @@ let clientStatus = {
 
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: './sessions' }),
-    puppeteer: {
-        headless: true,
+    puppeteer: puppeteerExtra,
+    puppeteerOptions: {
+        headless: false,
+        executablePath: executablePath(),
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -29,6 +47,7 @@ const client = new Client({
         ],
     }
 });
+
 
 // ===== Event WhatsApp Client =====
 client.on('qr', (qr) => {
